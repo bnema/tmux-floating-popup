@@ -35,7 +35,8 @@ popup_session_name() {
   local session_name=''
   while IFS= read -r session_name; do
     case "$session_name" in
-      tmux-floating-popup-[0-9]*)
+      ''|*[!0-9]*) ;;
+      *)
         printf '%s' "$session_name"
         return 0
         ;;
@@ -47,7 +48,8 @@ popup_session_client() {
   local client_name='' session_name=''
   while IFS='|' read -r client_name session_name; do
     case "$session_name" in
-      tmux-floating-popup-[0-9]*)
+      ''|*[!0-9]*) ;;
+      *)
         printf '%s' "$client_name"
         return 0
         ;;

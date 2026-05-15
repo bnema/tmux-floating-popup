@@ -29,7 +29,7 @@ fi
 floating_popup_get_option() {
   local option="$1" default_value="${2:-}"
   local value
-  value="$($TMUX_BIN show-options -gvq "$option" 2>/dev/null)" || true
+  value="$("$TMUX_BIN" show-options -gvq "$option" 2>/dev/null)" || true
   if [ -n "$value" ]; then
     printf '%s' "$value"
   else
@@ -70,10 +70,6 @@ floating_popup_current_session() {
   "$TMUX_BIN" display-message -p -t "$client_name" '#{client_session}'
 }
 
-floating_popup_session_prefix() {
-  floating_popup_get_option @floating-popup-session-name tmux-floating-popup
-}
-
 floating_popup_width() {
   floating_popup_get_option @floating-popup-width 80%
 }
@@ -106,7 +102,7 @@ floating_popup_session_option() {
     printf '%s' "$default_value"
     return 0
   }
-  value="$($TMUX_BIN show-options -t "$session_name" -qv "$option" 2>/dev/null)" || true
+  value="$("$TMUX_BIN" show-options -t "$session_name" -qv "$option" 2>/dev/null)" || true
   if [ -n "$value" ]; then
     printf '%s' "$value"
   else
@@ -118,7 +114,7 @@ floating_popup_client_is_popup_session() {
   local client_name="$1"
   local flag=""
   client_name="$(floating_popup_current_client "$client_name")" || return 1
-  flag="$($TMUX_BIN display-message -p -t "$client_name" '#{@floating-popup-session}' 2>/dev/null || true)"
+  flag="$("$TMUX_BIN" display-message -p -t "$client_name" '#{@floating-popup-session}' 2>/dev/null || true)"
   [ "$flag" = '1' ]
 }
 
@@ -177,14 +173,11 @@ floating_popup_prepare_session() {
 
 floating_popup_create_session() {
   local owner_client="$1" start_path="$2"
-  local prefix session_id session_name
-
-  prefix="$(floating_popup_session_prefix)"
-  [ -n "$prefix" ] || prefix='tmux-floating-popup'
+  local session_id session_name
 
   while :; do
     session_id="$(floating_popup_allocate_session_id)"
-    session_name="${prefix}-${session_id}"
+    session_name="$session_id"
     if ! floating_popup_session_exists "$session_name"; then
       break
     fi

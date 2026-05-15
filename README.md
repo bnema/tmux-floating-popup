@@ -74,7 +74,6 @@ Configure the plugin with tmux user options in `~/.tmux.conf`.
 | `@floating-popup-key` | `M-f` | Key used to open the popup from normal tmux clients and hide it from inside the popup session |
 | `@floating-popup-width` | `80%` | Popup width passed to `display-popup` |
 | `@floating-popup-height` | `80%` | Popup height passed to `display-popup` |
-| `@floating-popup-session-name` | `tmux-floating-popup` | Prefix used for numbered popup sessions such as `tmux-floating-popup-1` |
 | `@floating-popup-title` | `Floating Popup` | Popup title passed to `display-popup -T` |
 
 Example:
@@ -83,7 +82,6 @@ Example:
 set -g @floating-popup-key 'M-f'
 set -g @floating-popup-width '80%'
 set -g @floating-popup-height '80%'
-set -g @floating-popup-session-name 'scratch-popup'
 set -g @floating-popup-title 'Scratch'
 ```
 
@@ -100,7 +98,7 @@ set -g @floating-popup-title 'Scratch'
 - The popup is backed by a tmux session instead of a one-shot shell.
 - `Alt-f` hides the popup by detaching that popup client, so shells, editors, and scrollback remain available when you reopen it.
 - `Esc` destroys the popup session completely, so the next open starts fresh.
-- The first open creates a numbered session such as `tmux-floating-popup-1`; later `Esc` closes create newer ids instead of reusing the old session name.
+- The first open creates a numbered session such as `1`; later `Esc` closes create newer ids instead of reusing the old session name.
 - Popup sessions have `status off`, so the popup looks like a normal shell rather than a nested tmux UI.
 - The plugin binds `Escape` at the root table and passes it through everywhere except popup sessions, where it closes the popup session.
 
@@ -120,7 +118,6 @@ You should see the root `Alt-f` binding for `scripts/open-popup.sh` and a condit
 ### The popup opens but starts fresh every time
 
 If that happens after `Alt-f` hide/show, check whether the popup session was destroyed with `Esc` or killed externally.
-Also reload the plugin after changing `@floating-popup-session-name`.
 
 ### I want a different key
 

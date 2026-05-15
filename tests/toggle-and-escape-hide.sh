@@ -12,7 +12,7 @@ PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
 REPO_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")/.." && "$PWD_BIN")" || exit 1
 
 work_dir="$(mktemp -d)"
-sock="tfp_test_toggle_escape_hide"
+sock="tfp_test_toggle_escape_hide.$$.$RANDOM"
 fake_bin="$work_dir/bin"
 mkdir -p "$fake_bin"
 
@@ -60,7 +60,7 @@ def popup_rows():
         if not line:
             continue
         client_name, session_name = line.split('|', 1)
-        if session_name.startswith('tmux-floating-popup-'):
+        if session_name.isdigit():
             rows.append((client_name, session_name))
     return rows
 
@@ -73,6 +73,16 @@ def popup_session_name():
 def popup_client_name():
     rows = popup_rows()
     return rows[0][0] if rows else ''
+
+
+def attached_client_name():
+    for line in stdout('tmux', 'list-clients', '-F', '#{client_name}|#{session_name}').splitlines():
+        if not line:
+            continue
+        client_name, session_name = line.split('|', 1)
+        if session_name == 'base':
+            return client_name
+    return ''
 
 
 def popup_session_exists(name):
@@ -122,7 +132,7 @@ client = subprocess.Popen(
 os.close(slave_fd)
 
 try:
-    time.sleep(1)
+    wait_for(attached_client_name, 5, 'attached client ready')
 
     os.write(master_fd, b'\x1bf')
     first_session = wait_for(popup_session_name, 5, 'expected popup session after first Alt-f')

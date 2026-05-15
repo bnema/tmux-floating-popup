@@ -43,7 +43,6 @@ main() {
   set_default @floating-popup-key M-f
   set_default @floating-popup-width 80%
   set_default @floating-popup-height 80%
-  set_default @floating-popup-session-name tmux-floating-popup
   set_default @floating-popup-title 'Floating Popup'
   set_default @floating-popup-next-id 1
 
