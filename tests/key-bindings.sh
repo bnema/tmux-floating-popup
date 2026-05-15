@@ -15,20 +15,38 @@ cleanup() {
 }
 trap cleanup EXIT
 
+env -u TMUX "$REAL_TMUX_BIN" -L "$sock" kill-server 2>/dev/null || true
 env -u TMUX "$REAL_TMUX_BIN" -f /dev/null -L "$sock" new-session -d -s base 'sleep 9999'
 env -u TMUX "$REAL_TMUX_BIN" -L "$sock" run-shell "$REPO_DIR/tmux-floating-popup.tmux"
 
-root_binding="$(env -u TMUX "$REAL_TMUX_BIN" -L "$sock" list-keys -T root M-f 2>/dev/null || true)"
-popup_binding="$(env -u TMUX "$REAL_TMUX_BIN" -L "$sock" list-keys -T popup M-f 2>/dev/null || true)"
+root_popup_binding="$(env -u TMUX "$REAL_TMUX_BIN" -L "$sock" list-keys -T root M-f 2>/dev/null || true)"
+root_escape_binding="$(env -u TMUX "$REAL_TMUX_BIN" -L "$sock" list-keys -T root Escape 2>/dev/null || true)"
+legacy_popup_binding="$(env -u TMUX "$REAL_TMUX_BIN" -L "$sock" list-keys -T popup M-f 2>/dev/null || true)"
+legacy_custom_binding="$(env -u TMUX "$REAL_TMUX_BIN" -L "$sock" list-keys -T floating-popup M-f 2>/dev/null || true)"
 
-printf '%s\n' "$root_binding" | grep -Fq 'scripts/open-popup.sh' || {
+printf '%s\n' "$root_popup_binding" | grep -Fq 'scripts/open-popup.sh' || {
   echo 'expected root M-f binding for scripts/open-popup.sh' >&2
   exit 1
 }
 
-printf '%s\n' "$popup_binding" | grep -Fq 'scripts/close-popup.sh' || {
-  echo 'expected popup M-f binding for scripts/close-popup.sh' >&2
+printf '%s\n' "$root_escape_binding" | grep -Fq 'scripts/close-popup.sh' || {
+  echo 'expected root Escape binding for scripts/close-popup.sh' >&2
   exit 1
 }
 
-echo 'ok: plugin installs root and popup M-f bindings'
+printf '%s\n' "$root_escape_binding" | grep -Fq 'send-keys Escape' || {
+  echo 'expected root Escape binding to preserve normal Escape behavior outside popup sessions' >&2
+  exit 1
+}
+
+[ -z "$legacy_popup_binding" ] || {
+  echo 'expected no legacy popup-table M-f binding' >&2
+  exit 1
+}
+
+[ -z "$legacy_custom_binding" ] || {
+  echo 'expected no legacy floating-popup-table M-f binding' >&2
+  exit 1
+}
+
+echo 'ok: plugin installs root Alt-f toggle and conditional root Escape close binding'

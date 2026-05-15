@@ -13,6 +13,7 @@ PLUGIN_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")" && "$PWD_BIN")" || exit 1
 SCRIPTS_DIR="$PLUGIN_DIR/scripts"
 OPEN_SCRIPT="$SCRIPTS_DIR/open-popup.sh"
 CLOSE_SCRIPT="$SCRIPTS_DIR/close-popup.sh"
+LEGACY_POPUP_KEY_TABLE='floating-popup'
 
 set_default() {
   local option="$1" default_value="$2"
@@ -44,6 +45,7 @@ main() {
   set_default @floating-popup-height 80%
   set_default @floating-popup-session-name tmux-floating-popup
   set_default @floating-popup-title 'Floating Popup'
+  set_default @floating-popup-next-id 1
 
   local popup_key previous_key quoted_open_script quoted_close_script
   popup_key="$("$TMUX_BIN" show-options -gvq @floating-popup-key)"
@@ -53,14 +55,21 @@ main() {
 
   if [ -n "$previous_key" ] && [ "$previous_key" != "$popup_key" ]; then
     unbind_plugin_binding root "$previous_key" "$OPEN_SCRIPT"
-    unbind_plugin_binding popup "$previous_key" "$CLOSE_SCRIPT"
+    "$TMUX_BIN" unbind-key -T popup "$previous_key" 2>/dev/null || true
+    "$TMUX_BIN" unbind-key -T "$LEGACY_POPUP_KEY_TABLE" "$previous_key" 2>/dev/null || true
   fi
+
+  "$TMUX_BIN" unbind-key -T popup "$popup_key" 2>/dev/null || true
+  "$TMUX_BIN" unbind-key -T "$LEGACY_POPUP_KEY_TABLE" "$popup_key" 2>/dev/null || true
+  "$TMUX_BIN" unbind-key -T "$LEGACY_POPUP_KEY_TABLE" Escape 2>/dev/null || true
 
   "$TMUX_BIN" bind-key -T root "$popup_key" \
     run-shell "$quoted_open_script #{q:client_name} #{q:pane_current_path}"
-  "$TMUX_BIN" bind-key -T popup "$popup_key" \
-    run-shell "$quoted_close_script #{q:client_name}"
+  "$TMUX_BIN" bind-key -T root Escape \
+    if-shell -F '#{==:#{@floating-popup-session},1}' \
+      "run-shell \"$quoted_close_script #{q:client_name}\"" \
+      'send-keys Escape'
   "$TMUX_BIN" set-option -gq @floating-popup-bound-key "$popup_key"
 }
 
-main "$@"
+main

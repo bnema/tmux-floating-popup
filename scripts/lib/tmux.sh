@@ -29,12 +29,17 @@ fi
 floating_popup_get_option() {
   local option="$1" default_value="${2:-}"
   local value
-  value="$("$TMUX_BIN" show-options -gvq "$option" 2>/dev/null)" || true
+  value="$($TMUX_BIN show-options -gvq "$option" 2>/dev/null)" || true
   if [ -n "$value" ]; then
     printf '%s' "$value"
   else
     printf '%s' "$default_value"
   fi
+}
+
+floating_popup_set_option() {
+  local option="$1" value="$2"
+  "$TMUX_BIN" set-option -gq "$option" "$value"
 }
 
 floating_popup_current_client() {
@@ -59,7 +64,13 @@ floating_popup_current_path() {
   fi
 }
 
-floating_popup_session_name() {
+floating_popup_current_session() {
+  local client_name
+  client_name="$(floating_popup_current_client "$@")" || return 1
+  "$TMUX_BIN" display-message -p -t "$client_name" '#{client_session}'
+}
+
+floating_popup_session_prefix() {
   floating_popup_get_option @floating-popup-session-name tmux-floating-popup
 }
 
@@ -75,10 +86,148 @@ floating_popup_title() {
   floating_popup_get_option @floating-popup-title 'Floating Popup'
 }
 
-floating_popup_attach_command() {
+floating_popup_session_exists() {
   local session_name="$1"
-  local start_path="$2"
-  local command=""
-  printf -v command 'tmux new-session -A -s %q -c %q' "$session_name" "$start_path"
-  printf '%s' "$command"
+  [ -n "$session_name" ] && "$TMUX_BIN" has-session -t "=$session_name" 2>/dev/null
+}
+
+floating_popup_session_flag() {
+  printf '@floating-popup-session'
+}
+
+floating_popup_owner_option() {
+  printf '@floating-popup-owner-client'
+}
+
+floating_popup_session_option() {
+  local session_name="$1" option="$2" default_value="${3:-}"
+  local value=""
+  [ -n "$session_name" ] || {
+    printf '%s' "$default_value"
+    return 0
+  }
+  value="$($TMUX_BIN show-options -t "$session_name" -qv "$option" 2>/dev/null)" || true
+  if [ -n "$value" ]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "$default_value"
+  fi
+}
+
+floating_popup_client_is_popup_session() {
+  local client_name="$1"
+  local flag=""
+  client_name="$(floating_popup_current_client "$client_name")" || return 1
+  flag="$($TMUX_BIN display-message -p -t "$client_name" '#{@floating-popup-session}' 2>/dev/null || true)"
+  [ "$flag" = '1' ]
+}
+
+floating_popup_owner_client_for_session() {
+  local session_name="$1"
+  floating_popup_session_option "$session_name" "$(floating_popup_owner_option)" ''
+}
+
+floating_popup_client_option_suffix() {
+  local client_name="$1"
+  client_name="${client_name//[^[:alnum:]]/_}"
+  printf '%s' "$client_name"
+}
+
+floating_popup_client_session_option() {
+  local client_name="$1"
+  printf '@floating-popup-client-%s-session' "$(floating_popup_client_option_suffix "$client_name")"
+}
+
+floating_popup_get_client_session() {
+  local client_name="$1"
+  floating_popup_get_option "$(floating_popup_client_session_option "$client_name")" ''
+}
+
+floating_popup_set_client_session() {
+  local client_name="$1" session_name="$2"
+  floating_popup_set_option "$(floating_popup_client_session_option "$client_name")" "$session_name"
+}
+
+floating_popup_clear_client_session() {
+  local client_name="$1"
+  floating_popup_set_client_session "$client_name" ''
+}
+
+floating_popup_allocate_session_id() {
+  local raw_id next_id
+  raw_id="$(floating_popup_get_option @floating-popup-next-id 1)"
+  case "$raw_id" in
+    ''|*[!0-9]*) raw_id=1 ;;
+  esac
+  next_id=$((raw_id + 1))
+  floating_popup_set_option @floating-popup-next-id "$next_id"
+  printf '%s' "$raw_id"
+}
+
+floating_popup_prepare_session() {
+  local session_name="$1" owner_client="$2"
+  [ -n "$session_name" ] || return 1
+  [ -n "$owner_client" ] || return 1
+
+  "$TMUX_BIN" set-option -q -t "$session_name" "$(floating_popup_session_flag)" 1
+  "$TMUX_BIN" set-option -q -t "$session_name" "$(floating_popup_owner_option)" "$owner_client"
+  "$TMUX_BIN" set-option -q -t "$session_name" destroy-unattached off
+  "$TMUX_BIN" set-option -q -t "$session_name" status off
+}
+
+floating_popup_create_session() {
+  local owner_client="$1" start_path="$2"
+  local prefix session_id session_name
+
+  prefix="$(floating_popup_session_prefix)"
+  [ -n "$prefix" ] || prefix='tmux-floating-popup'
+
+  while :; do
+    session_id="$(floating_popup_allocate_session_id)"
+    session_name="${prefix}-${session_id}"
+    if ! floating_popup_session_exists "$session_name"; then
+      break
+    fi
+  done
+
+  "$TMUX_BIN" new-session -d -s "$session_name" -c "$start_path"
+  floating_popup_prepare_session "$session_name" "$owner_client"
+  printf '%s' "$session_name"
+}
+
+floating_popup_resolve_session_for_client() {
+  local client_name="$1" start_path="$2"
+  local session_name=""
+
+  session_name="$(floating_popup_get_client_session "$client_name")"
+  if [ -n "$session_name" ] && floating_popup_session_exists "$session_name"; then
+    floating_popup_prepare_session "$session_name" "$client_name"
+    printf '%s' "$session_name"
+    return 0
+  fi
+
+  session_name="$(floating_popup_create_session "$client_name" "$start_path")" || return 1
+  floating_popup_set_client_session "$client_name" "$session_name"
+  printf '%s' "$session_name"
+}
+
+floating_popup_hide_popup_session() {
+  local client_name="$1"
+  client_name="$(floating_popup_current_client "$client_name")" || return 1
+  "$TMUX_BIN" detach-client -t "$client_name"
+}
+
+floating_popup_destroy_popup_session() {
+  local client_name="$1"
+  local session_name="" owner_client=""
+
+  client_name="$(floating_popup_current_client "$client_name")" || return 1
+  session_name="$(floating_popup_current_session "$client_name")" || return 1
+  owner_client="$(floating_popup_owner_client_for_session "$session_name")"
+
+  if [ -n "$owner_client" ]; then
+    floating_popup_clear_client_session "$owner_client"
+  fi
+
+  "$TMUX_BIN" kill-session -t "$session_name"
 }

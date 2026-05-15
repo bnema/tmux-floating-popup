@@ -12,4 +12,8 @@ source "$SCRIPT_DIR/lib/tmux.sh"
 client_name="${1:-}"
 client_name="$(floating_popup_current_client "$client_name")" || exit 1
 
-"$TMUX_BIN" display-popup -c "$client_name" -C
+if floating_popup_client_is_popup_session "$client_name"; then
+  floating_popup_destroy_popup_session "$client_name"
+else
+  "$TMUX_BIN" display-popup -c "$client_name" -C
+fi

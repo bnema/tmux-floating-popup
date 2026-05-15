@@ -15,11 +15,15 @@ source_path="${2:-}"
 client_name="$(floating_popup_current_client "$client_name")" || exit 1
 source_path="$(floating_popup_current_path "$source_path")" || exit 1
 
-session_name="$(floating_popup_session_name)"
+if floating_popup_client_is_popup_session "$client_name"; then
+  floating_popup_hide_popup_session "$client_name"
+  exit 0
+fi
+
+session_name="$(floating_popup_resolve_session_for_client "$client_name" "$source_path")" || exit 1
 width="$(floating_popup_width)"
 height="$(floating_popup_height)"
 title="$(floating_popup_title)"
-popup_command="$(floating_popup_attach_command "$session_name" "$source_path")"
 
 "$TMUX_BIN" display-popup \
   -c "$client_name" \
@@ -28,5 +32,5 @@ popup_command="$(floating_popup_attach_command "$session_name" "$source_path")"
   -w "$width" \
   -h "$height" \
   -T "$title" \
-  -d "$source_path" \
-  -E "$popup_command"
+  -E \
+  tmux attach-session -t "=$session_name"

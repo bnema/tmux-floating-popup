@@ -23,17 +23,61 @@ cleanup() {
 }
 trap cleanup EXIT
 
-popup_session_client() {
-  local awk_program="\$2 == \"tmux-floating-popup\" { print \$1; exit }"
-  env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}	#{session_name}' |
-    "$AWK_BIN" -F $'\t' "$awk_program"
-}
+env -u TMUX "$REAL_TMUX_BIN" -L "$sock" kill-server 2>/dev/null || true
 
 cat >"$fake_bin/tmux" <<EOF
 #!/usr/bin/env bash
 exec "$REAL_TMUX_BIN" -L "$sock" "\$@"
 EOF
 chmod +x "$fake_bin/tmux"
+
+popup_session_name() {
+  local session_name=''
+  while IFS= read -r session_name; do
+    case "$session_name" in
+      tmux-floating-popup-[0-9]*)
+        printf '%s' "$session_name"
+        return 0
+        ;;
+    esac
+  done < <(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{session_name}')
+}
+
+popup_session_client() {
+  local client_name='' session_name=''
+  while IFS='|' read -r client_name session_name; do
+    case "$session_name" in
+      tmux-floating-popup-[0-9]*)
+        printf '%s' "$client_name"
+        return 0
+        ;;
+    esac
+  done < <(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}|#{session_name}')
+}
+
+wait_for_popup_client() {
+  local popup_session="" popup_client=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    popup_session="$(popup_session_name)"
+    popup_client="$(popup_session_client)"
+    if [ -n "$popup_session" ] && [ -n "$popup_client" ]; then
+      printf '%s	%s' "$popup_session" "$popup_client"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_no_popup_client() {
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -z "$(popup_session_client)" ]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
 
 env -u TMUX PATH="$fake_bin:$PATH" tmux -f /dev/null new-session -d -s base 'sleep 9999'
 env -u TMUX PATH="$fake_bin:$PATH" tmux run-shell "$REPO_DIR/tmux-floating-popup.tmux"
@@ -48,63 +92,81 @@ env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$client_na
 open_popup_pid=$!
 sleep 1
 
-if ! env -u TMUX PATH="$fake_bin:$PATH" tmux has-session -t '=tmux-floating-popup' 2>/dev/null; then
-  echo 'expected popup session to be created' >&2
+first_popup="$(wait_for_popup_client)" || {
+  echo 'expected popup client after first Alt-f open' >&2
   exit 1
-fi
+}
+first_session="${first_popup%%$'\t'*}"
+popup_client="${first_popup#*$'\t'}"
 
-popup_client=''
-for _ in 1 2 3 4 5; do
-  popup_client="$(popup_session_client)"
-  [ -n "$popup_client" ] && break
-  sleep 1
-done
-[ -n "$popup_client" ] || { echo 'expected a client attached to the popup session' >&2; exit 1; }
+status_option="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$first_session" -qv status 2>/dev/null || true)"
+[ "$status_option" = 'off' ] || {
+  echo "expected popup session status to be off, got: $status_option" >&2
+  exit 1
+}
 
-env -u TMUX PATH="$fake_bin:$PATH" tmux new-window -t '=tmux-floating-popup' -n persisted
-env -u TMUX PATH="$fake_bin:$PATH" tmux select-window -t '=tmux-floating-popup:persisted'
+owner_client="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$first_session" -qv @floating-popup-owner-client 2>/dev/null || true)"
+[ "$owner_client" = "$client_name" ] || {
+  echo "expected popup owner client to be $client_name, got: $owner_client" >&2
+  exit 1
+}
 
-env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/close-popup.sh" "$client_name"
+env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$popup_client" "$work_dir"
 wait "$open_popup_pid" || true
-sleep 1
-
-if ! env -u TMUX PATH="$fake_bin:$PATH" tmux has-session -t '=tmux-floating-popup' 2>/dev/null; then
-  echo 'expected popup session to survive after closing the popup' >&2
+wait_for_no_popup_client || {
+  echo 'expected popup client to detach after Alt-f hide' >&2
   exit 1
-fi
+}
 
-if env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{session_name}' | grep -Fxq 'tmux-floating-popup'; then
-  echo 'expected popup client to detach after closing the popup' >&2
+env -u TMUX PATH="$fake_bin:$PATH" tmux has-session -t "=$first_session" 2>/dev/null || {
+  echo 'expected popup session to survive Alt-f hide' >&2
   exit 1
-fi
-
-if ! env -u TMUX PATH="$fake_bin:$PATH" tmux list-windows -t '=tmux-floating-popup' -F '#{window_name}' | grep -Fxq 'persisted'; then
-  echo 'expected persisted window to remain in popup session' >&2
-  exit 1
-fi
+}
 
 env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$client_name" "$work_dir" >/dev/null 2>&1 &
 reopen_popup_pid=$!
 sleep 1
 
-popup_client=''
-for _ in 1 2 3 4 5; do
-  popup_client="$(popup_session_client)"
-  [ -n "$popup_client" ] && break
-  sleep 1
-done
-[ -n "$popup_client" ] || { echo 'expected popup session to reattach on reopen' >&2; exit 1; }
-
-active_window_awk="\$1 == \"1\" { print \$2; exit }"
-active_window="$(env -u TMUX PATH="$fake_bin:$PATH" tmux list-windows -t '=tmux-floating-popup' -F '#{?window_active,1,0}	#{window_name}' |
-  "$AWK_BIN" -F $'\t' "$active_window_awk")"
-[ "$active_window" = 'persisted' ] || {
-  echo "expected popup session to reopen on persisted window, got: $active_window" >&2
+reopened_popup="$(wait_for_popup_client)" || {
+  echo 'expected popup client after reopening with Alt-f' >&2
+  exit 1
+}
+reopened_session="${reopened_popup%%$'\t'*}"
+reopened_popup_client="${reopened_popup#*$'\t'}"
+[ "$reopened_session" = "$first_session" ] || {
+  echo "expected Alt-f reopen to reuse $first_session, got: $reopened_session" >&2
   exit 1
 }
 
-env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/close-popup.sh" "$client_name"
+env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/close-popup.sh" "$reopened_popup_client"
 wait "$reopen_popup_pid" || true
+wait_for_no_popup_client || {
+  echo 'expected popup client to disappear after Esc close' >&2
+  exit 1
+}
+
+if env -u TMUX PATH="$fake_bin:$PATH" tmux has-session -t "=$first_session" 2>/dev/null; then
+  echo 'expected Esc close to destroy the popup session' >&2
+  exit 1
+fi
+
+env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$client_name" "$work_dir" >/dev/null 2>&1 &
+new_popup_pid=$!
+sleep 1
+
+second_popup="$(wait_for_popup_client)" || {
+  echo 'expected popup client after creating a fresh session' >&2
+  exit 1
+}
+second_session="${second_popup%%$'\t'*}"
+second_popup_client="${second_popup#*$'\t'}"
+[ "$second_session" != "$first_session" ] || {
+  echo "expected a fresh popup session after Esc close, but reused: $second_session" >&2
+  exit 1
+}
+
+env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/close-popup.sh" "$second_popup_client"
+wait "$new_popup_pid" || true
 kill "$client_pid" 2>/dev/null || true
 
-echo 'ok: popup session persists across close and reopen'
+echo 'ok: Alt-f reuses the hidden popup session and Esc destroys it so the next open gets a new session id'
