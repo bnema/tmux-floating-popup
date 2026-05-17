@@ -22,9 +22,19 @@ floating_popup_require_command() {
   printf '%s' "$resolved"
 }
 
-if [ -z "${TMUX_BIN:-}" ]; then
-  TMUX_BIN="$(floating_popup_require_command tmux)" || _floating_popup_return_or_exit 1
-fi
+floating_popup_resolve_command() {
+  local name="$1" candidate="${2:-}" resolved=""
+  if [ -n "$candidate" ]; then
+    resolved="$(command -v "$candidate" 2>/dev/null || true)"
+    if [ -n "$resolved" ]; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  fi
+  floating_popup_require_command "$name"
+}
+
+TMUX_BIN="$(floating_popup_resolve_command tmux "${TMUX_BIN:-}")" || _floating_popup_return_or_exit 1
 
 floating_popup_get_option() {
   local option="$1" default_value="${2:-}"
@@ -139,6 +149,14 @@ floating_popup_get_client_session() {
   floating_popup_get_option "$(floating_popup_client_session_option "$client_name")" ''
 }
 
+floating_popup_session_is_owned_by_client() {
+  local session_name="$1" client_name="$2"
+  [ -n "$session_name" ] || return 1
+  [ -n "$client_name" ] || return 1
+  [ "$(floating_popup_session_option "$session_name" "$(floating_popup_session_flag)" '')" = '1' ] || return 1
+  [ "$(floating_popup_owner_client_for_session "$session_name")" = "$client_name" ] || return 1
+}
+
 floating_popup_set_client_session() {
   local client_name="$1" session_name="$2"
   floating_popup_set_option "$(floating_popup_client_session_option "$client_name")" "$session_name"
@@ -177,7 +195,7 @@ floating_popup_create_session() {
 
   while :; do
     session_id="$(floating_popup_allocate_session_id)"
-    session_name="$session_id"
+    session_name="__floating-popup-$session_id"
     if ! floating_popup_session_exists "$session_name"; then
       break
     fi
@@ -194,9 +212,12 @@ floating_popup_resolve_session_for_client() {
 
   session_name="$(floating_popup_get_client_session "$client_name")"
   if [ -n "$session_name" ] && floating_popup_session_exists "$session_name"; then
-    floating_popup_prepare_session "$session_name" "$client_name"
-    printf '%s' "$session_name"
-    return 0
+    if floating_popup_session_is_owned_by_client "$session_name" "$client_name"; then
+      floating_popup_prepare_session "$session_name" "$client_name"
+      printf '%s' "$session_name"
+      return 0
+    fi
+    floating_popup_clear_client_session "$client_name"
   fi
 
   session_name="$(floating_popup_create_session "$client_name" "$start_path")" || return 1

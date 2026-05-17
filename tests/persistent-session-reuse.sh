@@ -32,29 +32,23 @@ EOF
 chmod +x "$fake_bin/tmux"
 
 popup_session_name() {
-  local session_name=''
-  while IFS= read -r session_name; do
-    case "$session_name" in
-      ''|*[!0-9]*) ;;
-      *)
-        printf '%s' "$session_name"
-        return 0
-        ;;
-    esac
-  done < <(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{session_name}')
+  local session_name='' popup_flag=''
+  while IFS='|' read -r session_name popup_flag; do
+    if [ "$popup_flag" = '1' ]; then
+      printf '%s' "$session_name"
+      return 0
+    fi
+  done < <(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{session_name}|#{@floating-popup-session}')
 }
 
 popup_session_client() {
-  local client_name='' session_name=''
-  while IFS='|' read -r client_name session_name; do
-    case "$session_name" in
-      ''|*[!0-9]*) ;;
-      *)
-        printf '%s' "$client_name"
-        return 0
-        ;;
-    esac
-  done < <(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}|#{session_name}')
+  local client_name='' session_name='' popup_flag=''
+  while IFS='|' read -r client_name session_name popup_flag; do
+    if [ "$popup_flag" = '1' ]; then
+      printf '%s' "$client_name"
+      return 0
+    fi
+  done < <(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}|#{session_name}|#{@floating-popup-session}')
 }
 
 wait_for_popup_client() {
