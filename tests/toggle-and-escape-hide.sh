@@ -56,11 +56,11 @@ def stdout(*args):
 
 def popup_rows():
     rows = []
-    for line in stdout('tmux', 'list-clients', '-F', '#{client_name}|#{session_name}').splitlines():
+    for line in stdout('tmux', 'list-clients', '-F', '#{client_name}|#{session_name}|#{@floating-popup-session}').splitlines():
         if not line:
             continue
-        client_name, session_name = line.split('|', 1)
-        if session_name.isdigit():
+        client_name, session_name, popup_flag = line.split('|', 2)
+        if popup_flag == '1':
             rows.append((client_name, session_name))
     return rows
 
