@@ -2,7 +2,7 @@
 
 A TPM plugin that adds a floating terminal popup for tmux.
 `Alt-f` toggles the popup without losing its shell state, while `Esc` closes it and destroys that popup session.
-The next `Alt-f` creates a fresh numbered popup session.
+The next `Alt-f` creates a fresh internal popup session named `__floating-popup-<id>`.
 
 ## Requirements
 
@@ -91,14 +91,14 @@ set -g @floating-popup-title 'Scratch'
 - Press `Alt-f` while the popup is focused to hide it and preserve that popup session.
 - Press `Esc` while the popup is focused to close it and destroy that popup session.
 - Press `Alt-f` again after hiding to resume the same popup shell.
-- Press `Alt-f` again after `Esc` to start a fresh numbered popup session.
+- After closing with `Esc`, press `Alt-f` to start a fresh internal popup session.
 
 ## Behavior notes
 
 - The popup is backed by a tmux session instead of a one-shot shell.
 - `Alt-f` hides the popup by detaching that popup client, so shells, editors, and scrollback remain available when you reopen it.
 - `Esc` destroys the popup session completely, so the next open starts fresh.
-- The first open creates a numbered session such as `1`; later `Esc` closes create newer ids instead of reusing the old session name.
+- The first open creates an internal session such as `__floating-popup-1`; subsequent opens after closing with `Esc` create newer ids instead of reusing the old session name.
 - Popup sessions have `status off`, so the popup looks like a normal shell rather than a nested tmux UI.
 - The plugin binds `Escape` at the root table and passes it through everywhere except popup sessions, where it closes the popup session.
 
