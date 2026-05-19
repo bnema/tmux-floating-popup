@@ -29,17 +29,26 @@ EOF
 chmod +x "$fake_bin/tmux"
 
 env -u TMUX PATH="$fake_bin:$PATH" tmux -f /dev/null new-session -d -s 1 'sleep 9999'
-env -u TMUX PATH="$fake_bin:$PATH" tmux set-option -gq @floating-popup-client-_dev_pts_10-session 1
+env -u TMUX PATH="$fake_bin:$PATH" tmux set-option -t 1 -q @floating-popup-session 1
+env -u TMUX PATH="$fake_bin:$PATH" tmux set-option -t 1 -q @floating-popup-owner-client /dev/pts/10
+env -u TMUX PATH="$fake_bin:$PATH" tmux set-option -t 1 -q @floating-popup-owner-session base
+client_session_option="$(
+  env -u TMUX PATH="$fake_bin:$PATH" bash -c '
+    source "$1/scripts/lib/tmux.sh"
+    floating_popup_client_session_option /dev/pts/10 base
+  ' bash "$REPO_DIR"
+)"
+env -u TMUX PATH="$fake_bin:$PATH" tmux set-option -gq "$client_session_option" 1
 
 resolved_session="$(
   env -u TMUX PATH="$fake_bin:$PATH" bash -c '
     source "$1/scripts/lib/tmux.sh"
-    floating_popup_resolve_session_for_client /dev/pts/10 "$2"
+    floating_popup_resolve_session_for_client /dev/pts/10 "$2" base
   ' bash "$REPO_DIR" "$work_dir"
 )"
 
 [ "$resolved_session" != '1' ] || {
-  echo 'expected stale client mapping to a regular session to be ignored' >&2
+  echo 'expected stale client mapping to a non-internal session to be ignored' >&2
   exit 1
 }
 case "$resolved_session" in
@@ -50,14 +59,16 @@ case "$resolved_session" in
     ;;
 esac
 
-regular_flag="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t 1 -qv @floating-popup-session 2>/dev/null || true)"
-regular_owner="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t 1 -qv @floating-popup-owner-client 2>/dev/null || true)"
+legacy_flag="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t 1 -qv @floating-popup-session 2>/dev/null || true)"
+legacy_owner="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t 1 -qv @floating-popup-owner-client 2>/dev/null || true)"
+legacy_owner_session="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t 1 -qv @floating-popup-owner-session 2>/dev/null || true)"
 regular_status="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t 1 -qv status 2>/dev/null || true)"
-stale_mapping="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -gqv @floating-popup-client-_dev_pts_10-session 2>/dev/null || true)"
+stale_mapping="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -gqv "$client_session_option" 2>/dev/null || true)"
 
-[ -z "$regular_flag" ] || { echo "expected regular session flag to stay empty, got: $regular_flag" >&2; exit 1; }
-[ -z "$regular_owner" ] || { echo "expected regular session owner to stay empty, got: $regular_owner" >&2; exit 1; }
-[ "$regular_status" != 'off' ] || { echo 'expected regular session status not to be forced off' >&2; exit 1; }
+[ "$legacy_flag" = '1' ] || { echo "expected legacy session flag to stay untouched, got: $legacy_flag" >&2; exit 1; }
+[ "$legacy_owner" = '/dev/pts/10' ] || { echo "expected legacy session owner to stay untouched, got: $legacy_owner" >&2; exit 1; }
+[ "$legacy_owner_session" = 'base' ] || { echo "expected legacy session owner session to stay untouched, got: $legacy_owner_session" >&2; exit 1; }
+[ "$regular_status" != 'off' ] || { echo 'expected non-internal session status not to be forced off' >&2; exit 1; }
 [ "$stale_mapping" = "$resolved_session" ] || { echo "expected client mapping to be updated to $resolved_session, got: $stale_mapping" >&2; exit 1; }
 
-echo 'ok: stale client mappings do not convert regular sessions into popup sessions'
+echo 'ok: stale client mappings do not claim non-internal sessions as popup sessions'
