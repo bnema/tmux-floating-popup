@@ -13,6 +13,7 @@ PLUGIN_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")" && "$PWD_BIN")" || exit 1
 SCRIPTS_DIR="$PLUGIN_DIR/scripts"
 OPEN_SCRIPT="$SCRIPTS_DIR/open-popup.sh"
 CLOSE_SCRIPT="$SCRIPTS_DIR/close-popup.sh"
+SMART_ESCAPE_SCRIPT="$SCRIPTS_DIR/smart-escape.sh"
 LEGACY_POPUP_KEY_TABLE='floating-popup'
 
 set_default() {
@@ -46,11 +47,11 @@ main() {
   set_default @floating-popup-title 'Floating Popup'
   set_default @floating-popup-next-id 1
 
-  local popup_key previous_key quoted_open_script quoted_close_script
+  local popup_key previous_key quoted_open_script quoted_smart_escape_script
   popup_key="$("$TMUX_BIN" show-options -gvq @floating-popup-key)"
   previous_key="$("$TMUX_BIN" show-options -gvq @floating-popup-bound-key 2>/dev/null || true)"
   printf -v quoted_open_script '%q' "$OPEN_SCRIPT"
-  printf -v quoted_close_script '%q' "$CLOSE_SCRIPT"
+  printf -v quoted_smart_escape_script '%q' "$SMART_ESCAPE_SCRIPT"
 
   if [ -n "$previous_key" ] && [ "$previous_key" != "$popup_key" ]; then
     unbind_plugin_binding root "$previous_key" "$OPEN_SCRIPT"
@@ -66,7 +67,7 @@ main() {
     run-shell "$quoted_open_script #{q:client_name} #{q:pane_current_path}"
   "$TMUX_BIN" bind-key -T root Escape \
     if-shell -F '#{==:#{@floating-popup-session},1}' \
-      "run-shell \"$quoted_close_script #{q:client_name}\"" \
+      "run-shell \"$quoted_smart_escape_script #{q:client_name}\"" \
       'send-keys Escape'
   "$TMUX_BIN" set-option -gq @floating-popup-bound-key "$popup_key"
 }

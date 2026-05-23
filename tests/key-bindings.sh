@@ -29,8 +29,8 @@ printf '%s\n' "$root_popup_binding" | grep -Fq 'scripts/open-popup.sh' || {
   exit 1
 }
 
-printf '%s\n' "$root_escape_binding" | grep -Fq 'scripts/close-popup.sh' || {
-  echo 'expected root Escape binding for scripts/close-popup.sh' >&2
+printf '%s\n' "$root_escape_binding" | grep -Fq 'scripts/smart-escape.sh' || {
+  echo 'expected root Escape binding for scripts/smart-escape.sh' >&2
   exit 1
 }
 
@@ -49,4 +49,4 @@ printf '%s\n' "$root_escape_binding" | grep -Fq 'send-keys Escape' || {
   exit 1
 }
 
-echo 'ok: plugin installs root Alt-f toggle and conditional root Escape close binding'
+echo 'ok: plugin installs root Alt-f toggle and conditional smart Escape binding'
