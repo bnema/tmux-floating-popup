@@ -1,7 +1,8 @@
 # tmux Floating Popup
 
 A TPM plugin that adds a floating terminal popup for tmux.
-`Alt-f` toggles the popup without losing its shell state, while `Esc` closes it and destroys that popup session.
+`Alt-f` toggles the popup without losing its shell state, while `Esc` closes it only when the popup is sitting at a plain shell prompt.
+When an application such as Neovim is running inside the popup, `Esc` is passed through to that application.
 The next `Alt-f` creates a fresh internal popup session named `__floating-popup-<id>`.
 
 ## Requirements
@@ -89,7 +90,8 @@ set -g @floating-popup-title 'Scratch'
 
 - Press `Alt-f` from any normal tmux pane to open the popup.
 - Press `Alt-f` while the popup is focused to hide it and preserve that popup session.
-- Press `Esc` while the popup is focused to close it and destroy that popup session.
+- Press `Esc` while the popup is focused at a shell prompt to close it and destroy that popup session.
+- Press `Esc` while an application is running inside the popup to send `Esc` to that application.
 - Press `Alt-f` again after hiding to resume the same popup shell.
 - After closing with `Esc`, press `Alt-f` to start a fresh internal popup session.
 
@@ -97,10 +99,10 @@ set -g @floating-popup-title 'Scratch'
 
 - The popup is backed by a tmux session instead of a one-shot shell.
 - `Alt-f` hides the popup by detaching that popup client, so shells, editors, and scrollback remain available when you reopen it.
-- `Esc` destroys the popup session completely, so the next open starts fresh.
+- `Esc` destroys the popup session completely only when the active popup command is a known shell, so the next open starts fresh.
 - The first open creates an internal session such as `__floating-popup-1`; subsequent opens after closing with `Esc` create newer ids instead of reusing the old session name.
 - Popup sessions have `status off`, so the popup looks like a normal shell rather than a nested tmux UI.
-- The plugin binds `Escape` at the root table and passes it through everywhere except popup sessions, where it closes the popup session.
+- The plugin binds `Escape` at the root table and uses `#{pane_current_command}` inside popup sessions: known shells close the popup, other commands receive `Escape`.
 
 ## Troubleshooting
 
@@ -113,7 +115,7 @@ tmux list-keys -T root M-f
 tmux list-keys -T root Escape
 ```
 
-You should see the root `Alt-f` binding for `scripts/open-popup.sh` and a conditional root `Escape` binding for `scripts/close-popup.sh`.
+You should see the root `Alt-f` binding for `scripts/open-popup.sh` and a conditional root `Escape` binding for `scripts/smart-escape.sh`.
 
 ### The popup opens but starts fresh every time
 
