@@ -178,6 +178,37 @@ floating_popup_get_client_session() {
   floating_popup_get_option "$(floating_popup_client_session_option "$client_name" "$owner_session")" ''
 }
 
+floating_popup_client_exists() {
+  local client_name="$1" existing_client=""
+  [ -n "$client_name" ] || return 1
+
+  while IFS= read -r existing_client; do
+    if [ "$existing_client" = "$client_name" ]; then
+      return 0
+    fi
+  done < <("$TMUX_BIN" list-clients -F '#{client_name}' 2>/dev/null || true)
+
+  return 1
+}
+
+floating_popup_cleanup_stale_sessions() {
+  local session_name="" owner_client="" owner_session="" attached=""
+
+  while IFS='|' read -r session_name owner_client owner_session attached; do
+    [ -n "$session_name" ] || continue
+    floating_popup_is_internal_session_name "$session_name" || continue
+    [ -n "$owner_client" ] || continue
+    [ "$attached" = '0' ] || continue
+
+    if ! floating_popup_client_exists "$owner_client"; then
+      if [ -n "$owner_session" ]; then
+        floating_popup_clear_client_session "$owner_client" "$owner_session"
+      fi
+      "$TMUX_BIN" kill-session -t "=$session_name" 2>/dev/null || true
+    fi
+  done < <("$TMUX_BIN" list-sessions -F '#{session_name}|#{@floating-popup-owner-client}|#{@floating-popup-owner-session}|#{session_attached}' 2>/dev/null || true)
+}
+
 floating_popup_session_is_owned_by_client_session() {
   local session_name="$1" client_name="$2" owner_session="$3"
   [ -n "$session_name" ] || return 1
@@ -243,6 +274,10 @@ floating_popup_create_session() {
 floating_popup_resolve_session_for_client() {
   local client_name="$1" start_path="$2" requested_owner_session="${3:-}"
   local owner_session="" session_name=""
+
+  if floating_popup_client_exists "$client_name"; then
+    floating_popup_cleanup_stale_sessions
+  fi
 
   if [ -n "$requested_owner_session" ]; then
     owner_session="$requested_owner_session"
