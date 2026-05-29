@@ -12,9 +12,11 @@ GREP_BIN="$(command -v grep 2>/dev/null || true)"
 PLUGIN_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")" && "$PWD_BIN")" || exit 1
 SCRIPTS_DIR="$PLUGIN_DIR/scripts"
 OPEN_SCRIPT="$SCRIPTS_DIR/open-popup.sh"
-CLOSE_SCRIPT="$SCRIPTS_DIR/close-popup.sh"
 SMART_ESCAPE_SCRIPT="$SCRIPTS_DIR/smart-escape.sh"
+LIB_SCRIPT="$SCRIPTS_DIR/lib/tmux.sh"
 LEGACY_POPUP_KEY_TABLE='floating-popup'
+# shellcheck source=/dev/null
+source "$LIB_SCRIPT"
 
 set_default() {
   local option="$1" default_value="$2"
@@ -41,6 +43,8 @@ unbind_plugin_binding() {
 }
 
 main() {
+  floating_popup_cleanup_stale_popup_clients
+
   set_default @floating-popup-key M-f
   set_default @floating-popup-width 80%
   set_default @floating-popup-height 80%
@@ -66,9 +70,7 @@ main() {
   "$TMUX_BIN" bind-key -T root "$popup_key" \
     run-shell "$quoted_open_script #{q:client_name} #{q:pane_current_path}"
   "$TMUX_BIN" bind-key -T root Escape \
-    if-shell -F '#{==:#{@floating-popup-session},1}' \
-      "run-shell \"$quoted_smart_escape_script #{q:client_name}\"" \
-      'send-keys Escape'
+    run-shell "$quoted_smart_escape_script #{q:client_name}"
   "$TMUX_BIN" set-option -gq @floating-popup-bound-key "$popup_key"
 }
 

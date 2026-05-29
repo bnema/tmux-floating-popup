@@ -15,7 +15,7 @@ source_path="${2:-}"
 client_name="$(floating_popup_current_client "$client_name")" || exit 1
 source_path="$(floating_popup_current_path "$source_path")" || exit 1
 
-if floating_popup_client_is_popup_session "$client_name"; then
+if floating_popup_client_is_popup_client "$client_name" || floating_popup_client_is_popup_session "$client_name"; then
   floating_popup_hide_popup_session "$client_name"
   exit 0
 fi
@@ -33,4 +33,4 @@ title="$(floating_popup_title)"
   -h "$height" \
   -T "$title" \
   -E \
-  tmux attach-session -t "=$session_name"
+  "$SCRIPT_DIR/attach-popup.sh" "$session_name"

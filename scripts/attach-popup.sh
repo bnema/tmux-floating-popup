@@ -9,13 +9,11 @@ SCRIPT_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")" && "$PWD_BIN")" || exit 1
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib/tmux.sh"
 
-client_name="${1:-}"
-client_name="$(floating_popup_current_client "$client_name")" || exit 1
+session_name="${1:-}"
+[ -n "$session_name" ] || { echo 'tmux-floating-popup: popup session name required' >&2; exit 1; }
 
-if floating_popup_client_is_popup_session "$client_name"; then
-  floating_popup_destroy_popup_session "$client_name"
-elif floating_popup_client_is_popup_client "$client_name"; then
-  floating_popup_hide_popup_session "$client_name"
-else
-  "$TMUX_BIN" display-popup -c "$client_name" -C
-fi
+client_name="$(tty 2>/dev/null || true)"
+[ -n "$client_name" ] || { echo 'tmux-floating-popup: popup client tty not found' >&2; exit 1; }
+
+floating_popup_mark_popup_client "$client_name" "$$"
+exec "$TMUX_BIN" attach-session -t "=$session_name"

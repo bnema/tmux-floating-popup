@@ -173,6 +173,34 @@ floating_popup_client_session_option() {
   printf '@floating-popup-client-%s-session' "$suffix"
 }
 
+floating_popup_client_marker_option() {
+  local client_name="$1"
+  printf '@floating-popup-client-marker%s' "$(floating_popup_client_option_suffix "$client_name")"
+}
+
+floating_popup_client_pid_option() {
+  local client_name="$1"
+  printf '@floating-popup-client%s-pid' "$(floating_popup_client_option_suffix "$client_name")"
+}
+
+floating_popup_mark_popup_client() {
+  local client_name="$1" client_pid="$2"
+  [ -n "$client_name" ] || return 1
+  [ -n "$client_pid" ] || return 1
+  case "$client_pid" in
+    *[!0-9]*) return 1 ;;
+  esac
+  floating_popup_set_option "$(floating_popup_client_marker_option "$client_name")" 1
+  floating_popup_set_option "$(floating_popup_client_pid_option "$client_name")" "$client_pid"
+}
+
+floating_popup_clear_popup_client() {
+  local client_name="$1"
+  [ -n "$client_name" ] || return 0
+  floating_popup_set_option "$(floating_popup_client_marker_option "$client_name")" ''
+  floating_popup_set_option "$(floating_popup_client_pid_option "$client_name")" ''
+}
+
 floating_popup_get_client_session() {
   local client_name="$1" owner_session="${2:-}"
   floating_popup_get_option "$(floating_popup_client_session_option "$client_name" "$owner_session")" ''
@@ -189,6 +217,45 @@ floating_popup_client_exists() {
   done < <("$TMUX_BIN" list-clients -F '#{client_name}' 2>/dev/null || true)
 
   return 1
+}
+
+floating_popup_client_is_popup_client() {
+  local client_name="$1" marker="" expected_pid="" actual_pid=""
+  client_name="$(floating_popup_current_client "$client_name")" || return 1
+  marker="$(floating_popup_get_option "$(floating_popup_client_marker_option "$client_name")" '')"
+  [ "$marker" = '1' ] || return 1
+  floating_popup_client_exists "$client_name" || return 1
+
+  expected_pid="$(floating_popup_get_option "$(floating_popup_client_pid_option "$client_name")" '')"
+  actual_pid="$("$TMUX_BIN" display-message -p -t "$client_name" '#{client_pid}' 2>/dev/null || true)"
+  [ -n "$expected_pid" ] && [ "$actual_pid" = "$expected_pid" ]
+}
+
+floating_popup_cleanup_stale_popup_clients() {
+  local live_options=$'\n' client_name="" marker_option="" pid_option="" option_line="" option_name=""
+
+  while IFS= read -r client_name; do
+    [ -n "$client_name" ] || continue
+    marker_option="$(floating_popup_client_marker_option "$client_name")"
+    pid_option="$(floating_popup_client_pid_option "$client_name")"
+    if floating_popup_client_is_popup_client "$client_name"; then
+      live_options="${live_options}${marker_option}"$'\n'"${pid_option}"$'\n'
+    else
+      floating_popup_clear_popup_client "$client_name"
+    fi
+  done < <("$TMUX_BIN" list-clients -F '#{client_name}' 2>/dev/null || true)
+
+  while IFS= read -r option_line; do
+    option_name="${option_line%% *}"
+    case "$option_name" in
+      @floating-popup-client-marker_*|@floating-popup-client_*-pid)
+        case "$live_options" in
+          *$'\n'"$option_name"$'\n'*) ;;
+          *) floating_popup_set_option "$option_name" '' ;;
+        esac
+        ;;
+    esac
+  done < <("$TMUX_BIN" show-options -g 2>/dev/null || true)
 }
 
 floating_popup_cleanup_stale_sessions() {
@@ -276,6 +343,7 @@ floating_popup_resolve_session_for_client() {
   local owner_session="" session_name=""
 
   if floating_popup_client_exists "$client_name"; then
+    floating_popup_cleanup_stale_popup_clients
     floating_popup_cleanup_stale_sessions
   fi
 
@@ -302,6 +370,7 @@ floating_popup_resolve_session_for_client() {
 floating_popup_hide_popup_session() {
   local client_name="$1"
   client_name="$(floating_popup_current_client "$client_name")" || return 1
+  floating_popup_clear_popup_client "$client_name"
   "$TMUX_BIN" detach-client -t "$client_name"
 }
 
@@ -318,5 +387,6 @@ floating_popup_destroy_popup_session() {
     floating_popup_clear_client_session "$owner_client" "$owner_session"
   fi
 
+  floating_popup_clear_popup_client "$client_name"
   "$TMUX_BIN" kill-session -t "$session_name"
 }
