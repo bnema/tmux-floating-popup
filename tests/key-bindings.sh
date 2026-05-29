@@ -34,8 +34,8 @@ printf '%s\n' "$root_escape_binding" | grep -Fq 'scripts/smart-escape.sh' || {
   exit 1
 }
 
-printf '%s\n' "$root_escape_binding" | grep -Fq 'send-keys Escape' || {
-  echo 'expected root Escape binding to preserve normal Escape behavior outside popup sessions' >&2
+printf '%s\n' "$root_escape_binding" | grep -Fq 'run-shell' || {
+  echo 'expected root Escape binding to delegate normal Escape preservation to smart-escape.sh' >&2
   exit 1
 }
 
@@ -49,4 +49,4 @@ printf '%s\n' "$root_escape_binding" | grep -Fq 'send-keys Escape' || {
   exit 1
 }
 
-echo 'ok: plugin installs root Alt-f toggle and conditional smart Escape binding'
+echo 'ok: plugin installs root Alt-f toggle and smart Escape binding'

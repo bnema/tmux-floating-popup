@@ -27,14 +27,15 @@ is_interactive_shell() {
   esac
 }
 
-if ! floating_popup_client_is_popup_session "$client_name"; then
-  "$TMUX_BIN" send-keys -t "$client_name" Escape
-  exit 0
-fi
-
-pane_command="$($TMUX_BIN display-message -p -t "$client_name" '#{pane_current_command}' 2>/dev/null || true)"
-if is_interactive_shell "$pane_command"; then
-  "$SCRIPT_DIR/close-popup.sh" "$client_name"
+if floating_popup_client_is_popup_session "$client_name"; then
+  pane_command="$($TMUX_BIN display-message -p -t "$client_name" '#{pane_current_command}' 2>/dev/null || true)"
+  if is_interactive_shell "$pane_command"; then
+    "$SCRIPT_DIR/close-popup.sh" "$client_name"
+  else
+    "$TMUX_BIN" send-keys -t "$client_name" Escape
+  fi
+elif floating_popup_client_is_popup_client "$client_name"; then
+  floating_popup_hide_popup_session "$client_name"
 else
   "$TMUX_BIN" send-keys -t "$client_name" Escape
 fi

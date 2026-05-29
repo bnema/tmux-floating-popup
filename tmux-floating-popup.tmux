@@ -66,9 +66,7 @@ main() {
   "$TMUX_BIN" bind-key -T root "$popup_key" \
     run-shell "$quoted_open_script #{q:client_name} #{q:pane_current_path}"
   "$TMUX_BIN" bind-key -T root Escape \
-    if-shell -F '#{==:#{@floating-popup-session},1}' \
-      "run-shell \"$quoted_smart_escape_script #{q:client_name}\"" \
-      'send-keys Escape'
+    run-shell "$quoted_smart_escape_script #{q:client_name}"
   "$TMUX_BIN" set-option -gq @floating-popup-bound-key "$popup_key"
 }
 

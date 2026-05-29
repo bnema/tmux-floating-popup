@@ -173,6 +173,31 @@ floating_popup_client_session_option() {
   printf '@floating-popup-client-%s-session' "$suffix"
 }
 
+floating_popup_client_marker_option() {
+  local client_name="$1"
+  printf '@floating-popup-popup-client%s' "$(floating_popup_client_option_suffix "$client_name")"
+}
+
+floating_popup_client_pid_option() {
+  local client_name="$1"
+  printf '@floating-popup-popup-client%s-pid' "$(floating_popup_client_option_suffix "$client_name")"
+}
+
+floating_popup_mark_popup_client() {
+  local client_name="$1" client_pid="$2"
+  [ -n "$client_name" ] || return 1
+  [ -n "$client_pid" ] || return 1
+  floating_popup_set_option "$(floating_popup_client_marker_option "$client_name")" 1
+  floating_popup_set_option "$(floating_popup_client_pid_option "$client_name")" "$client_pid"
+}
+
+floating_popup_clear_popup_client() {
+  local client_name="$1"
+  [ -n "$client_name" ] || return 0
+  floating_popup_set_option "$(floating_popup_client_marker_option "$client_name")" ''
+  floating_popup_set_option "$(floating_popup_client_pid_option "$client_name")" ''
+}
+
 floating_popup_get_client_session() {
   local client_name="$1" owner_session="${2:-}"
   floating_popup_get_option "$(floating_popup_client_session_option "$client_name" "$owner_session")" ''
@@ -189,6 +214,18 @@ floating_popup_client_exists() {
   done < <("$TMUX_BIN" list-clients -F '#{client_name}' 2>/dev/null || true)
 
   return 1
+}
+
+floating_popup_client_is_popup_client() {
+  local client_name="$1" marker="" expected_pid="" actual_pid=""
+  client_name="$(floating_popup_current_client "$client_name")" || return 1
+  marker="$(floating_popup_get_option "$(floating_popup_client_marker_option "$client_name")" '')"
+  [ "$marker" = '1' ] || return 1
+  floating_popup_client_exists "$client_name" || return 1
+
+  expected_pid="$(floating_popup_get_option "$(floating_popup_client_pid_option "$client_name")" '')"
+  actual_pid="$("$TMUX_BIN" display-message -p -t "$client_name" '#{client_pid}' 2>/dev/null || true)"
+  [ -n "$expected_pid" ] && [ "$actual_pid" = "$expected_pid" ]
 }
 
 floating_popup_cleanup_stale_sessions() {
@@ -302,6 +339,7 @@ floating_popup_resolve_session_for_client() {
 floating_popup_hide_popup_session() {
   local client_name="$1"
   client_name="$(floating_popup_current_client "$client_name")" || return 1
+  floating_popup_clear_popup_client "$client_name"
   "$TMUX_BIN" detach-client -t "$client_name"
 }
 
@@ -318,5 +356,6 @@ floating_popup_destroy_popup_session() {
     floating_popup_clear_client_session "$owner_client" "$owner_session"
   fi
 
+  floating_popup_clear_popup_client "$client_name"
   "$TMUX_BIN" kill-session -t "$session_name"
 }
