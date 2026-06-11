@@ -444,7 +444,7 @@ floating_popup_resolve_session_for_client_locked() {
 floating_popup_with_session_lock() {
   local client_name="$1" owner_session="$2" handler="$3"
   shift 3
-  local channel status
+  local channel status unlock_status
   channel="$(floating_popup_lock_channel "$client_name" "$owner_session")"
   "$TMUX_BIN" wait-for -L "$channel" || return 1
   if "$handler" "$@"; then
@@ -452,7 +452,12 @@ floating_popup_with_session_lock() {
   else
     status=$?
   fi
-  "$TMUX_BIN" wait-for -U "$channel" 2>/dev/null || true
+  if "$TMUX_BIN" wait-for -U "$channel" 2>/dev/null; then
+    unlock_status=0
+  else
+    unlock_status=$?
+    printf 'tmux-floating-popup: failed to unlock channel %s (exit %s)\n' "$channel" "$unlock_status" >&2
+  fi
   return "$status"
 }
 
