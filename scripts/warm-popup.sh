@@ -16,21 +16,7 @@ client_name="$(floating_popup_current_client "$client_name")" || exit 1
 source_path="$(floating_popup_current_path "$source_path")" || exit 1
 
 if floating_popup_client_is_popup_client "$client_name" || floating_popup_client_is_popup_session "$client_name"; then
-  floating_popup_hide_popup_session "$client_name"
   exit 0
 fi
 
-session_name="$(floating_popup_open_session_for_client "$client_name" "$source_path")" || exit 1
-width="$(floating_popup_width)"
-height="$(floating_popup_height)"
-title="$(floating_popup_title)"
-
-"$TMUX_BIN" display-popup \
-  -c "$client_name" \
-  -x C \
-  -y C \
-  -w "$width" \
-  -h "$height" \
-  -T "$title" \
-  -E \
-  "$SCRIPT_DIR/attach-popup.sh" "$session_name"
+floating_popup_warm_session_for_client "$client_name" "$source_path" >/dev/null || exit 1

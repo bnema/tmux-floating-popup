@@ -76,6 +76,7 @@ Configure the plugin with tmux user options in `~/.tmux.conf`.
 | `@floating-popup-width` | `80%` | Popup width passed to `display-popup` |
 | `@floating-popup-height` | `80%` | Popup height passed to `display-popup` |
 | `@floating-popup-title` | `Floating Popup` | Popup title passed to `display-popup -T` |
+| `@floating-popup-warmup` | `off` | Pre-create hidden popup sessions on client attach/session changes so the first visible open can often reuse an already-started shell |
 
 Example:
 
@@ -84,6 +85,7 @@ set -g @floating-popup-key 'M-f'
 set -g @floating-popup-width '80%'
 set -g @floating-popup-height '80%'
 set -g @floating-popup-title 'Scratch'
+set -g @floating-popup-warmup 'on'
 ```
 
 ## Usage
@@ -99,6 +101,8 @@ set -g @floating-popup-title 'Scratch'
 ## Behavior notes
 
 - The popup is backed by a tmux session instead of a one-shot shell.
+- `@floating-popup-warmup on` pre-creates hidden popup sessions in the background for attached clients and session switches, so the first visible open can often skip shell startup work.
+- If a warmed session has never been opened and the requested pane path changes before the first visible open, the plugin refreshes that unused warmed session so the popup still starts in the current path.
 - `Alt-f` hides the popup by detaching that popup client, so shells, editors, and scrollback remain available when you reopen it.
 - `Esc` destroys the internal popup session completely only when the active popup command is a known shell, so the next open starts fresh.
 - The plugin tracks the popup client separately from the internal popup session. If that client is switched to a normal tmux session, closing the popup detaches only the popup client and never destroys the normal session.

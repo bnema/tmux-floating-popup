@@ -12,9 +12,11 @@ GREP_BIN="$(command -v grep 2>/dev/null || true)"
 PLUGIN_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")" && "$PWD_BIN")" || exit 1
 SCRIPTS_DIR="$PLUGIN_DIR/scripts"
 OPEN_SCRIPT="$SCRIPTS_DIR/open-popup.sh"
+WARM_SCRIPT="$SCRIPTS_DIR/warm-popup.sh"
 SMART_ESCAPE_SCRIPT="$SCRIPTS_DIR/smart-escape.sh"
 LIB_SCRIPT="$SCRIPTS_DIR/lib/tmux.sh"
 LEGACY_POPUP_KEY_TABLE='floating-popup'
+WARMUP_HOOK_SLOT=200
 # shellcheck source=/dev/null
 source "$LIB_SCRIPT"
 
@@ -42,6 +44,35 @@ unbind_plugin_binding() {
   fi
 }
 
+option_is_true() {
+  case "${1:-}" in
+    1|on|yes|true) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+configure_warmup_hooks() {
+  local quoted_warm_script warmup_enabled client_name source_path
+  printf -v quoted_warm_script '%q' "$WARM_SCRIPT"
+  "$TMUX_BIN" set-hook -gu "client-attached[$WARMUP_HOOK_SLOT]" 2>/dev/null || true
+  "$TMUX_BIN" set-hook -gu "client-session-changed[$WARMUP_HOOK_SLOT]" 2>/dev/null || true
+
+  warmup_enabled="$(floating_popup_warmup)"
+  if ! option_is_true "$warmup_enabled"; then
+    return 0
+  fi
+
+  "$TMUX_BIN" set-hook -g "client-attached[$WARMUP_HOOK_SLOT]" \
+    "run-shell $quoted_warm_script #{q:client_name} #{q:pane_current_path}"
+  "$TMUX_BIN" set-hook -g "client-session-changed[$WARMUP_HOOK_SLOT]" \
+    "run-shell $quoted_warm_script #{q:client_name} #{q:pane_current_path}"
+
+  while IFS='|' read -r client_name source_path; do
+    [ -n "$client_name" ] || continue
+    "$WARM_SCRIPT" "$client_name" "$source_path" >/dev/null 2>&1 &
+  done < <("$TMUX_BIN" list-clients -F '#{client_name}|#{pane_current_path}' 2>/dev/null || true)
+}
+
 main() {
   floating_popup_cleanup_stale_popup_clients
 
@@ -49,6 +80,7 @@ main() {
   set_default @floating-popup-width 80%
   set_default @floating-popup-height 80%
   set_default @floating-popup-title 'Floating Popup'
+  set_default @floating-popup-warmup off
   set_default @floating-popup-next-id 1
 
   local popup_key previous_key quoted_open_script quoted_smart_escape_script
@@ -72,6 +104,8 @@ main() {
   "$TMUX_BIN" bind-key -T root Escape \
     run-shell "$quoted_smart_escape_script #{q:client_name}"
   "$TMUX_BIN" set-option -gq @floating-popup-bound-key "$popup_key"
+
+  configure_warmup_hooks
 }
 
 main
