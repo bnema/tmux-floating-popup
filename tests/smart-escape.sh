@@ -21,7 +21,8 @@ cat >"$fake_bin/tmux" <<'FAKE_TMUX'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$TFP_LOG"
 
-if [ "$1" = 'display-message' ] && [ "$2" = '-p' ] && [ "$3" = '-t' ]; then
+if [ "$1" = 'display-message' ] && [ "$2" = '-p' ]; then
+  target_flag="$3"
   target="$4"
   format="$5"
   if [ "$target" = 'popup-client' ] && [ "$format" = '#{@floating-popup-session}' ]; then
@@ -32,7 +33,7 @@ if [ "$1" = 'display-message' ] && [ "$2" = '-p' ] && [ "$3" = '-t' ]; then
     printf '%s\n' "$TFP_PANE_COMMAND"
     exit 0
   fi
-  if [ "$target" = 'popup-client' ] && [ "$format" = '#{client_session}' ]; then
+  if [ "$target" = 'popup-client' ] && [ "$format" = '#{client_session}' ] && { [ "$target_flag" = '-t' ] || [ "$target_flag" = '-c' ]; }; then
     printf '__floating-popup-1\n'
     exit 0
   fi
@@ -40,7 +41,7 @@ fi
 
 if [ "$1" = 'show-options' ] && [ "$2" = '-t' ] && [ "$3" = '__floating-popup-1' ] && [ "$4" = '-qv' ]; then
   case "$5" in
-    @floating-popup-owner-client) printf 'owner-client\n'; exit 0 ;;
+    @floating-popup-session) printf '1\n'; exit 0 ;;
     @floating-popup-owner-session) printf 'base\n'; exit 0 ;;
   esac
 fi
@@ -56,7 +57,7 @@ run_smart_escape() {
 }
 
 run_smart_escape nvim
-if grep -Fq 'kill-session -t __floating-popup-1' "$log_file"; then
+if grep -Fq 'kill-session -t =__floating-popup-1' "$log_file"; then
   echo 'expected Escape in nvim to be passed through, not close the popup' >&2
   exit 1
 fi
@@ -66,7 +67,7 @@ grep -Fq 'send-keys -t popup-client Escape' "$log_file" || {
 }
 
 run_smart_escape bash
-grep -Fq 'kill-session -t __floating-popup-1' "$log_file" || {
+grep -Fq 'kill-session -t =__floating-popup-1' "$log_file" || {
   echo 'expected Escape in a plain shell to close the popup session' >&2
   exit 1
 }

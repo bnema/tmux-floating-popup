@@ -3,7 +3,7 @@
 A TPM plugin that adds a floating terminal popup for tmux.
 `Alt-f` toggles the popup without losing its shell state, while `Esc` closes it only when the popup is sitting at a plain shell prompt.
 When an application such as Neovim is running inside the popup, `Esc` is passed through to that application.
-The next `Alt-f` creates a fresh internal popup session named `__floating-popup-<id>`.
+Each parent tmux session owns at most one internal popup session named `__floating-popup-<id>`.
 
 ## Requirements
 
@@ -76,7 +76,7 @@ Configure the plugin with tmux user options in `~/.tmux.conf`.
 | `@floating-popup-width` | `80%` | Popup width passed to `display-popup` |
 | `@floating-popup-height` | `80%` | Popup height passed to `display-popup` |
 | `@floating-popup-title` | `Floating Popup` | Popup title passed to `display-popup -T` |
-| `@floating-popup-warmup` | `off` | Pre-create hidden popup sessions on client attach/session changes so the first visible open can often reuse an already-started shell |
+| `@floating-popup-warmup` | `off` | Pre-create hidden popup sessions for parent tmux sessions on client attach/session changes so the first visible open can often reuse an already-started shell |
 
 Example:
 
@@ -95,18 +95,21 @@ set -g @floating-popup-warmup 'on'
 - Press `Esc` while the popup is focused at a shell prompt to close it and destroy that popup session.
 - Press `Esc` while an application is running inside the popup to send `Esc` to that application.
 - If the popup client is switched to another tmux session, press `Esc` or `Alt-f` to close only the floating popup client without killing that session.
-- Press `Alt-f` again after hiding to resume the same popup shell.
-- After closing with `Esc`, press `Alt-f` to start a fresh internal popup session.
+- Press `Alt-f` again after hiding to resume the same popup shell for that parent tmux session.
+- Two clients attached to the same parent tmux session share the same popup session when it exists.
+- After closing with `Esc`, press `Alt-f` to start a fresh internal popup session for that parent tmux session.
 
 ## Behavior notes
 
 - The popup is backed by a tmux session instead of a one-shot shell.
-- `@floating-popup-warmup on` pre-creates hidden popup sessions in the background for attached clients and session switches, so the first visible open can often skip shell startup work.
+- Each parent tmux session owns at most one internal popup session. Two clients attached to the same parent session open, hide, and resume that shared popup session.
+- `@floating-popup-warmup on` pre-creates hidden popup sessions in the background for parent sessions on client attach and session switches, so the first visible open can often skip shell startup work.
 - If a warmed session has never been opened and the requested pane path changes before the first visible open, the plugin refreshes that unused warmed session so the popup still starts in the current path.
 - `Alt-f` hides the popup by detaching that popup client, so shells, editors, and scrollback remain available when you reopen it.
 - `Esc` destroys the internal popup session completely only when the active popup command is a known shell, so the next open starts fresh.
 - The plugin tracks the popup client separately from the internal popup session. If that client is switched to a normal tmux session, closing the popup detaches only the popup client and never destroys the normal session.
-- The first open creates an internal session such as `__floating-popup-1`; subsequent opens after closing with `Esc` create newer ids instead of reusing the old session name.
+- Cleanup removes internal popup sessions whose parent tmux session no longer exists.
+- The first open for a parent creates an internal session such as `__floating-popup-1`; subsequent opens after closing with `Esc` create newer ids instead of reusing the old session name.
 - Popup sessions have `status off`, so the popup looks like a normal shell rather than a nested tmux UI.
 - The plugin binds `Escape` at the root table and uses `#{pane_current_command}` inside internal popup sessions: known shells close the popup, other commands receive `Escape`.
 
