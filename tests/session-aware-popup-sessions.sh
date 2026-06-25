@@ -75,7 +75,7 @@ attached_base_clients() {
 
 wait_for_base_clients() {
   local expected="$1" clients='' count=''
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     clients="$(attached_base_clients)"
     count="$(printf '%s\n' "$clients" | awk 'NF { count++ } END { print count + 0 }')"
     if [ "$count" -ge "$expected" ]; then
@@ -120,6 +120,9 @@ dash_popup="$(resolve_popup_session_for_owner "$client_name" "$work_dir" foo-bar
 underscore_popup="$(resolve_popup_session_for_owner "$client_name" "$work_dir" foo_bar)"
 dash_popup_again="$(resolve_popup_session_for_owner "$client_name" "$work_dir" foo-bar)"
 user_named_popup="$(resolve_popup_session_for_owner "$client_name" "$work_dir" __floating-popup-user)"
+user_named_parent_id="$(env -u TMUX PATH="$fake_bin:$PATH" tmux display-message -p -t '=__floating-popup-user:' '#{session_id}')"
+user_named_popup_owner_session="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$user_named_popup" -qv @floating-popup-owner-session 2>/dev/null || true)"
+user_named_popup_owner_id="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$user_named_popup" -qv @floating-popup-owner-session-id 2>/dev/null || true)"
 
 case "$base_popup" in
   __floating-popup-*) ;;
@@ -178,6 +181,16 @@ case "$user_named_popup" in
     exit 1
     ;;
 esac
+
+[ "$user_named_popup_owner_session" = '__floating-popup-user' ] || {
+  echo "expected user-named popup owner session to be __floating-popup-user, got: $user_named_popup_owner_session" >&2
+  exit 1
+}
+
+[ "$user_named_popup_owner_id" = "$user_named_parent_id" ] || {
+  echo "expected user-named popup owner id to be $user_named_parent_id, got: $user_named_popup_owner_id" >&2
+  exit 1
+}
 
 [ "$(popup_path "$base_popup")" = "$base_dir" ] || {
   echo "expected base popup to start in $base_dir, got: $(popup_path "$base_popup")" >&2

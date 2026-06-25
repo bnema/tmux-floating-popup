@@ -53,17 +53,28 @@ cleanup_acquire_lock() {
   cleanup_lock_guard_dir="$guard_dir"
 
   (
-    trap '' HUP
+    guard_lock_acquired=0
+    # shellcheck disable=SC2329 # invoked by EXIT trap
+    cleanup_guard_exit() {
+      if [ "$guard_lock_acquired" = '1' ]; then
+        "$TMUX_BIN" wait-for -U "$cleanup_lock_channel" 2>/dev/null || true
+      fi
+      rm -rf "$guard_dir"
+    }
+    trap cleanup_guard_exit EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     if ! "$TMUX_BIN" wait-for -L "$cleanup_lock_channel"; then
       : > "$guard_dir/failed"
       exit 1
     fi
+    guard_lock_acquired=1
     : > "$guard_dir/acquired"
     while kill -0 "$cleanup_parent_pid" 2>/dev/null; do
       [ -f "$guard_dir/release" ] && break
       sleep 1
     done
-    "$TMUX_BIN" wait-for -U "$cleanup_lock_channel" 2>/dev/null || true
   ) &
   guard_pid=$!
   cleanup_lock_guard_pid="$guard_pid"
