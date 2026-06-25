@@ -33,21 +33,23 @@ export PATH="$fake_bin:$PATH"
 source "$REPO_DIR/scripts/lib/tmux.sh"
 
 tmux -f /dev/null new-session -d -s base 'sleep 9999'
+owner_session_id="$(floating_popup_session_id_for_target '=base')"
+[ -n "$owner_session_id" ] || {
+  echo 'test setup failed: could not resolve parent session id for base' >&2
+  exit 1
+}
 tmux new-session -d -s __floating-popup-stale -c "$work_dir"
-floating_popup_prepare_session __floating-popup-stale /dev/pts/missing base
-floating_popup_set_client_session /dev/pts/missing base __floating-popup-stale
+tmux set-option -t __floating-popup-stale -q "$(floating_popup_owner_session_option)" base
+tmux set-option -t __floating-popup-stale -q "$(floating_popup_owner_session_id_option)" "$owner_session_id"
+tmux set-option -t __floating-popup-stale -q status off
+tmux set-option -t __floating-popup-stale -q "$(floating_popup_session_flag)" 1
 
+tmux kill-session -t =base
 floating_popup_cleanup_stale_sessions
 
 if tmux has-session -t =__floating-popup-stale 2>/dev/null; then
-  echo 'expected stale popup session owned by a disconnected client to be removed' >&2
+  echo 'expected stale popup session to be removed after its parent session disappeared' >&2
   exit 1
 fi
 
-stale_mapping="$(floating_popup_get_client_session /dev/pts/missing base)"
-[ -z "$stale_mapping" ] || {
-  echo "expected stale client mapping to be cleared, got: $stale_mapping" >&2
-  exit 1
-}
-
-echo 'ok: stale popup sessions owned by disconnected clients are cleaned up'
+echo 'ok: popup sessions are cleaned up when their parent session disappears'

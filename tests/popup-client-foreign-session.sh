@@ -4,16 +4,25 @@ set -euo pipefail
 DIRNAME_BIN="$(command -v dirname 2>/dev/null || true)"
 PWD_BIN="$(command -v pwd 2>/dev/null || true)"
 REAL_TMUX_BIN="$(command -v tmux 2>/dev/null || true)"
+SCRIPT_BIN="$(command -v script 2>/dev/null || true)"
 [ -n "$DIRNAME_BIN" ] || { echo 'dirname not found' >&2; exit 1; }
 [ -n "$PWD_BIN" ] || { echo 'pwd not found' >&2; exit 1; }
 [ -n "$REAL_TMUX_BIN" ] || { echo 'tmux not found' >&2; exit 1; }
+[ -n "$SCRIPT_BIN" ] || { echo 'script not found' >&2; exit 1; }
 REPO_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")/.." && "$PWD_BIN")" || exit 1
 
 work_dir="$(mktemp -d)"
 sock="tfp_test_foreign_session.$$.$RANDOM"
 client_log="$work_dir/client.log"
+script_probe_log="$work_dir/script-probe.log"
 fake_bin="$work_dir/bin"
 mkdir -p "$fake_bin"
+
+if ! "$SCRIPT_BIN" -q -c true "$script_probe_log" >/dev/null 2>&1; then
+  echo 'script -c not supported' >&2
+  exit 1
+fi
+rm -f "$script_probe_log"
 
 cleanup() {
   env -u TMUX "$REAL_TMUX_BIN" -L "$sock" kill-server 2>/dev/null || true
@@ -64,7 +73,7 @@ wait_for() {
 env -u TMUX PATH="$fake_bin:$PATH" tmux -f /dev/null new-session -d -s base 'sleep 9999'
 env -u TMUX PATH="$fake_bin:$PATH" tmux new-session -d -s foreign 'sleep 9999'
 env -u TMUX PATH="$fake_bin:$PATH" tmux run-shell "$REPO_DIR/tmux-floating-popup.tmux"
-script -q -c "env -u TMUX PATH='$fake_bin:$PATH' TERM=xterm-256color tmux attach-session -t base" "$client_log" >/dev/null 2>&1 &
+"$SCRIPT_BIN" -q -c "env -u TMUX PATH='$fake_bin:$PATH' TERM=xterm-256color tmux attach-session -t base" "$client_log" >/dev/null 2>&1 &
 client_pid=$!
 sleep 1
 

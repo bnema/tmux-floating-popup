@@ -13,10 +13,12 @@ PLUGIN_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")" && "$PWD_BIN")" || exit 1
 SCRIPTS_DIR="$PLUGIN_DIR/scripts"
 OPEN_SCRIPT="$SCRIPTS_DIR/open-popup.sh"
 WARM_SCRIPT="$SCRIPTS_DIR/warm-popup.sh"
+CLEANUP_SCRIPT="$SCRIPTS_DIR/cleanup-popup-sessions.sh"
 SMART_ESCAPE_SCRIPT="$SCRIPTS_DIR/smart-escape.sh"
 LIB_SCRIPT="$SCRIPTS_DIR/lib/tmux.sh"
 LEGACY_POPUP_KEY_TABLE='floating-popup'
 WARMUP_HOOK_SLOT=200
+CLEANUP_HOOK_SLOT=201
 # shellcheck source=/dev/null
 source "$LIB_SCRIPT"
 
@@ -73,8 +75,19 @@ configure_warmup_hooks() {
   done < <("$TMUX_BIN" list-clients -F '#{client_name}|#{pane_current_path}' 2>/dev/null || true)
 }
 
+configure_cleanup_hooks() {
+  local quoted_cleanup_script
+  printf -v quoted_cleanup_script '%q' "$CLEANUP_SCRIPT"
+  "$TMUX_BIN" set-hook -gu "session-closed[$CLEANUP_HOOK_SLOT]" 2>/dev/null || true
+  "$TMUX_BIN" set-hook -gu "client-detached[$CLEANUP_HOOK_SLOT]" 2>/dev/null || true
+  "$TMUX_BIN" set-hook -g "session-closed[$CLEANUP_HOOK_SLOT]" \
+    "run-shell -b $quoted_cleanup_script"
+  "$TMUX_BIN" set-hook -g "client-detached[$CLEANUP_HOOK_SLOT]" \
+    "run-shell -b $quoted_cleanup_script"
+}
+
 main() {
-  floating_popup_cleanup_stale_popup_clients
+  "$CLEANUP_SCRIPT" >/dev/null &
 
   set_default @floating-popup-key M-f
   set_default @floating-popup-width 80%
@@ -105,6 +118,7 @@ main() {
     run-shell "$quoted_smart_escape_script #{q:client_name}"
   "$TMUX_BIN" set-option -gq @floating-popup-bound-key "$popup_key"
 
+  configure_cleanup_hooks
   configure_warmup_hooks
 }
 

@@ -5,17 +5,26 @@ DIRNAME_BIN="$(command -v dirname 2>/dev/null || true)"
 PWD_BIN="$(command -v pwd 2>/dev/null || true)"
 REAL_TMUX_BIN="$(command -v tmux 2>/dev/null || true)"
 AWK_BIN="$(command -v awk 2>/dev/null || true)"
+SCRIPT_BIN="$(command -v script 2>/dev/null || true)"
 [ -n "$DIRNAME_BIN" ] || { echo 'dirname not found' >&2; exit 1; }
 [ -n "$PWD_BIN" ] || { echo 'pwd not found' >&2; exit 1; }
 [ -n "$REAL_TMUX_BIN" ] || { echo 'tmux not found' >&2; exit 1; }
 [ -n "$AWK_BIN" ] || { echo 'awk not found' >&2; exit 1; }
+[ -n "$SCRIPT_BIN" ] || { echo 'script not found' >&2; exit 1; }
 REPO_DIR="$(cd "$($DIRNAME_BIN "${BASH_SOURCE[0]}")/.." && "$PWD_BIN")" || exit 1
 
 work_dir="$(mktemp -d)"
-sock="tfp_test_persistent_reuse"
+sock="tfp_test_persistent_reuse.$$.$RANDOM"
 client_log="$work_dir/client.log"
+script_probe_log="$work_dir/script-probe.log"
 fake_bin="$work_dir/bin"
 mkdir -p "$fake_bin"
+
+if ! "$SCRIPT_BIN" -q -c true "$script_probe_log" >/dev/null 2>&1; then
+  echo 'script -c not supported' >&2
+  exit 1
+fi
+rm -f "$script_probe_log"
 
 cleanup() {
   env -u TMUX "$REAL_TMUX_BIN" -L "$sock" kill-server 2>/dev/null || true
@@ -53,7 +62,7 @@ popup_session_client() {
 
 wait_for_popup_client() {
   local popup_session="" popup_client=""
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     popup_session="$(popup_session_name)"
     popup_client="$(popup_session_client)"
     if [ -n "$popup_session" ] && [ -n "$popup_client" ]; then
@@ -66,8 +75,21 @@ wait_for_popup_client() {
 }
 
 wait_for_no_popup_client() {
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     if [ -z "$(popup_session_client)" ]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_attached_client() {
+  local client_name=''
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    client_name="$(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}' 2>/dev/null | head -n1)"
+    if [ -n "$client_name" ]; then
+      printf '%s' "$client_name"
       return 0
     fi
     sleep 1
@@ -77,12 +99,10 @@ wait_for_no_popup_client() {
 
 env -u TMUX PATH="$fake_bin:$PATH" tmux -f /dev/null new-session -d -s base 'sleep 9999'
 env -u TMUX PATH="$fake_bin:$PATH" tmux run-shell "$REPO_DIR/tmux-floating-popup.tmux"
-script -q -c "env -u TMUX PATH='$fake_bin:$PATH' TERM=xterm-256color tmux attach-session -t base" "$client_log" >/dev/null 2>&1 &
+"$SCRIPT_BIN" -q -c "env -u TMUX PATH='$fake_bin:$PATH' TERM=xterm-256color tmux attach-session -t base" "$client_log" >/dev/null 2>&1 &
 client_pid=$!
-sleep 1
 
-client_name="$(env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}' | head -n1)"
-[ -n "$client_name" ] || { echo 'no tmux client found' >&2; exit 1; }
+client_name="$(wait_for_attached_client)" || { echo 'no tmux client found' >&2; exit 1; }
 
 env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$client_name" "$work_dir" >/dev/null 2>&1 &
 open_popup_pid=$!
@@ -101,9 +121,10 @@ status_option="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$first
   exit 1
 }
 
-owner_client="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$first_session" -qv @floating-popup-owner-client 2>/dev/null || true)"
-[ "$owner_client" = "$client_name" ] || {
-  echo "expected popup owner client to be $client_name, got: $owner_client" >&2
+base_session_id="$(env -u TMUX PATH="$fake_bin:$PATH" tmux display-message -p -t '=base:' '#{session_id}')"
+owner_session_id="$(env -u TMUX PATH="$fake_bin:$PATH" tmux show-options -t "$first_session" -qv @floating-popup-owner-session-id 2>/dev/null || true)"
+[ "$owner_session_id" = "$base_session_id" ] || {
+  echo "expected popup owner session id to be $base_session_id, got: $owner_session_id" >&2
   exit 1
 }
 
@@ -146,12 +167,20 @@ if env -u TMUX PATH="$fake_bin:$PATH" tmux has-session -t "=$first_session" 2>/d
   exit 1
 fi
 
-env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$client_name" "$work_dir" >/dev/null 2>&1 &
+new_open_stdout="$work_dir/new-open.stdout"
+new_open_stderr="$work_dir/new-open.stderr"
+env -u TMUX PATH="$fake_bin:$PATH" "$REPO_DIR/scripts/open-popup.sh" "$client_name" "$work_dir" >"$new_open_stdout" 2>"$new_open_stderr" &
 new_popup_pid=$!
 sleep 1
 
 second_popup="$(wait_for_popup_client)" || {
   echo 'expected popup client after creating a fresh session' >&2
+  echo '--- open-popup stderr ---' >&2
+  cat "$new_open_stderr" >&2 || true
+  echo '--- tmux clients ---' >&2
+  env -u TMUX PATH="$fake_bin:$PATH" tmux list-clients -F '#{client_name}|#{session_name}|#{@floating-popup-session}' >&2 || true
+  echo '--- tmux sessions ---' >&2
+  env -u TMUX PATH="$fake_bin:$PATH" tmux list-sessions -F '#{session_name}|#{session_attached}|#{@floating-popup-session}|#{@floating-popup-owner-session-id}|#{@floating-popup-owner-session}' >&2 || true
   exit 1
 }
 second_session="${second_popup%%$'\t'*}"
